@@ -81,43 +81,4 @@ https://naosim.github.io/postit/
 </svg>
 
 ### KPTのようなもの
-<svg xmlns="http://www.w3.org/2000/svg" id="svgCanvas" viewBox="0 0 1059 289">
-  <defs>
-    <style>
-    #package-text-group {
-      stroke:#333;
-      dominant-baseline:text-before-edge;
-    }
-    #rect-group {
-      stroke:#880;
-      fill:#ff8
-    }
-    #text-group {
-      stroke:#333;
-      dominant-baseline:text-before-edge;
-    }
-    #line-group {
-      stroke:#333;
-      marker-end:url(#Triangle);
-      fill:none;
-      stroke-width:1;
-    }
-    </style>
-    <marker id="Triangle" viewBox="0 0 10 10" refX="12" refY="5"
-        markerWidth="6" markerHeight="6" orient="auto" fill="#333">
-      <path d="M 0 0 L 10 5 L 0 10 z" />
-    </marker>
-  </defs>
-  <g id="package-text-group"><text dx="24" dy="24" x="0" y="16" font-size="11">keep</text>
-<text dx="24" dy="24" x="0" y="107" font-size="11">problem</text>
-<text dx="24" dy="24" x="0" y="198" font-size="11">try</text></g>
-  <g id="rect-group"><rect x="28" y="59" rx="3" ry="3" width="112" height="28" />
-<rect x="153.3125" y="59" rx="3" ry="3" width="64" height="28" />
-<rect x="28" y="150" rx="3" ry="3" width="144" height="28" />
-<rect x="28" y="241" rx="3" ry="3" width="64" height="28" /></g>
-  <g id="text-group"><text dx="4" x="28" y="53"><tspan x="28" dx="4" dy="12">・天気がいい</tspan></text>
-<text dx="4" x="153.3125" y="53"><tspan x="153.3125" dx="4" dy="12">・平和</tspan></text>
-<text dx="4" x="28" y="144"><tspan x="28" dx="4" dy="12">・やる気が出ない</tspan></text>
-<text dx="4" x="28" y="235"><tspan x="28" dx="4" dy="12">・帰る</tspan></text></g>
-  <g id="line-group"><polyline points="100,178 40,255"  /></g>
-</svg>
+![KPT](https://naosim.github.io/postit/img/kpt.svg)
