@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+
+<style>
+  h1 {
+    line-height: 0.5;
+  }
+  p {
+    margin: 0px;
+    margin-left: 15px;
+    line-height: 1em;
+  }
+
+  ul:before {
+    content: attr(data-name);
+    display: block;
+    font-size: 8pt;
+    color: #888;
+    opacity: 0;
+  }
+  ul {
+    padding-left: 24px;
+    padding-top: 24px;
+  }
+
+  li {
+    display: inline-block;
+    padding: 2px 4px;
+    padding-right: 12px;
+    margin: 4px;
+    color: #333;
+  }
+
+  li:before {
+    content: '・'
+  }
+
+  html, body {
+    margin: 0px;
+    padding: 0px;
+    background: #eee;
+  }
+
+  .element-layer {
+    padding: 12px;
+    z-index: 10;
+  }
+
+  .line-layer {
+    z-index: 20;
+  }
+  .layer {
+    position: absolute;
+    margin: 0px;
+    width: 100%;
+  }
+  #root {
+    padding: 0px;
+  }
+  .inputArea {
+    width: 100%;
+    height: 320px;
+  }
+</style>
+<script src="http://127.0.0.1:3000/"></script>
+<!-- <script src="./js/main.js"></script> -->
+
+<h1>入力</h1>
+<textarea id="inputArea" class="inputArea">
+{
+  "domain": {
+    "member": {
+      "Entity": { "text": "会員エンティティ", "dependences": ["$.vo.Id"] },
+      "vo": {
+        "Id": { "text": "会員ID" }
+      }
+    },
+    "contract": {
+      "Entity": { "text": "契約エンティティ\nほげ\nふーーー\nばーーー", "dependences": [ "$.vo.Id", "domain.member.vo.Id", "$.vo.State", "$.vo.StartDate", "$.vo.EndDate"] },
+      "vo": {
+        "Id": { "text": "契約ID" },
+        "State": { "text": "契約状態" },
+        "StartDate": { "text": "契約開始日" },
+        "EndDate": { "text": "契約開始日" }
+      }
+    },
+    "option": {
+      "Entity": { "text": "オプションエンティティ", "dependences": [ "$.vo.Id", "domain.contract.vo.Id", "$.vo.Type" ] },
+      "vo": {
+        "Id": { "text": "オプションID", "dependences": [ "$.Type" ] },
+        "Type": { "text": "オプションタイプ" }
+      }
+    }
+  }
+}
+</textarea>
+<button id="applyButton" class="applyButton">apply</button>
+
+<h1>出力</h1>
+<textarea id="outputArea" class="outputArea"></textarea>
+<div class="screen">
+  <div id="root" class="layer element-layer"></div>
+  <div class="layer line-layer"><!-- ここにsvgが挿入される --></div>
+</div>
+<script>
+
+
+function main(input) {
+
+  function querySelectorAll(selector) {
+    var l = document.querySelectorAll(selector);
+    l.filter = Array.prototype.filter;
+    l.map = Array.prototype.map;
+    l.forEach = Array.prototype.forEach;
+    return l;
+  }
+
+  // テキスト計算用DOMを作る
+  document.querySelector('#root').innerHTML = dom.createHtml(input);
+
+  const findElementDomPosition = createFindElementDomPosition(
+    [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0],
+    querySelectorAll('li')
+  );
+
+  const svg = createSvg(
+    [document.querySelector('#root')].map(v => ({width: v.clientWidth, height: v.clientHeight}))[0],
+    findElementDomPosition,
+    postit.parse(input)
+  );
+
+  document.querySelector('.line-layer').innerHTML = svg;
+  document.querySelector('#outputArea').value = svg;
+
+  // テキスト計算用DOM削除
+  document.querySelector('#root').innerHTML = '';
+}
+
+function apply() {
+  // var input = JSON.parse(document.querySelector('#inputArea').value);
+  // main(input);
+  try {
+    var input = JSON.parse(document.querySelector('#inputArea').value);
+    main(input);
+  } catch(e) {
+    alert(e);
+  }
+}
+apply();
+document.querySelector('#applyButton').addEventListener('click', apply);
+
+</script>
