@@ -107,7 +107,7 @@ var postit;
             var value = data[key];
             var currentPackage = package ? package.append(new Name(key)) : new Package(key);
             if (isElement(key)) {
-                nodes.push(new Element(currentPackage, Type.element, new Text(value.text), (value.dependences || []).map(function (v) { return new Package(v[0] !== '$' ? v : v.split('$').join(package.value)); })));
+                nodes.push(new Element(currentPackage, Type.element, new Text(value.text), (value.dependences || value.dep || []).map(function (v) { return new Package(v[0] !== '$' ? v : v.split('$').join(package.value)); })));
             }
             else if (isNode(key, value)) {
                 nodes = parse(value, currentPackage).reduce(function (m, n) { m.push(n); return m; }, nodes);

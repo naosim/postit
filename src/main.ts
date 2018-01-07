@@ -80,7 +80,7 @@ module postit {
               currentPackage,
               Type.element,
               new Text(value.text),
-              (value.dependences || []).map(v => new Package(v[0] !== '$' ? v : v.split('$').join(package.value)))
+              (value.dependences || value.dep || []).map(v => new Package(v[0] !== '$' ? v : v.split('$').join(package.value)))
             )
           );
         } else if(isNode(key, value)) {
