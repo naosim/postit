@@ -66,7 +66,7 @@ var postit;
     (function (Type) {
         Type[Type["package"] = 0] = "package";
         Type[Type["element"] = 1] = "element";
-    })(Type || (Type = {}));
+    })(Type = postit.Type || (postit.Type = {}));
     var Node = /** @class */ (function () {
         function Node(p, t) {
             this.package = p;
@@ -120,8 +120,10 @@ var postit;
 var dom;
 (function (dom) {
     var ElementDomModel = /** @class */ (function () {
-        function ElementDomModel(p, t, x, y, cX, cY, w, h) {
+        function ElementDomModel(type, p, n, t, x, y, cX, cY, w, h) {
+            this.type = type;
             this.package = p;
+            this.name = n;
             this.text = t;
             this.x = x;
             this.y = y;
@@ -161,6 +163,7 @@ var dom;
         return LineModel;
     }());
     dom.LineModel = LineModel;
+    // 本当はここでdomを使わずに計算的に位置を決定したい
     function createHtml(data, path) {
         var memo = '';
         Object.keys(data)
@@ -169,55 +172,72 @@ var dom;
             var currentPath = path ? path + "." + key : key;
             if (postit.isElement(key)) {
                 var text = value.text.split('\n').map(function (v, i) { return i == 0 ? "" + v : "<p>" + v + "</p>"; }).join('\n');
-                memo += "<li data-package=\"" + currentPath + "\" data-name=\"" + key + "\">" + text + "</li>\n";
+                var style = ['margin-left', 'margin-top']
+                    .filter(function (key) { return value[key]; })
+                    .map(function (key) { return key + ":" + value[key] + "px"; })
+                    .join(';');
+                memo += "<li data-package=\"" + currentPath + "\" data-name=\"" + key + "\" style=\"" + style + "\">" + text + "</li>\n";
             }
             else if (postit.isNode(key, value)) {
-                memo += "<ul data-package=\"" + currentPath + "\" data-name=\"" + key + "\">" + createHtml(value, currentPath) + "</ul>\n";
+                memo += "<ul class=\"package\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\">" + createHtml(value, currentPath) + "</ul>\n";
             }
         });
         return memo;
     }
     dom.createHtml = createHtml;
 })(dom || (dom = {}));
-function createFindElementDomPosition(offset, liList) {
-    var screenPos = offset;
-    var domList = liList
-        .map(function (v) { return ({ package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text: v.innerText }); })
-        .map(function (v) { return ({
-        package: v.package,
-        text: v.text,
-        x: window.scrollX + v.rect.left - screenPos.x,
-        y: window.scrollY + v.rect.top - screenPos.y,
-        centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
-        centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
-        w: v.rect.width,
-        h: v.rect.height
-    }); })
-        .map(function (v) { return new dom.ElementDomModel(new postit.Package(v.package), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
-    return function (p) {
-        var a = domList.filter(function (v) { return v.package.value == p; });
+var ElementDomModelRepositoryImpl = /** @class */ (function () {
+    function ElementDomModelRepositoryImpl(offset, liList, ulList) {
+        var screenPos = offset;
+        var list = [];
+        liList.forEach(function (v) { return list.push(v); });
+        if (ulList) {
+            ulList.forEach(function (v) { return list.push(v); });
+        }
+        this.domList = list
+            .map(function (v) { return ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text: v.innerText, name: v.getAttribute('data-name') }); })
+            .map(function (v) { return ({
+            tagName: v.tagName,
+            package: v.package,
+            name: v.name,
+            text: v.text,
+            x: window.scrollX + v.rect.left - screenPos.x,
+            y: window.scrollY + v.rect.top - screenPos.y,
+            centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
+            centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
+            w: v.rect.width,
+            h: v.rect.height
+        }); })
+            .map(function (v) { return new dom.ElementDomModel(v.tagName == 'UL' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
+    }
+    ElementDomModelRepositoryImpl.prototype.findByPackage = function (p) {
+        var a = this.domList.filter(function (v) { return v.package.value == p.value; });
         if (a.length == 0) {
             throw new Error("dom not found: " + p);
         }
         return a[0];
     };
-}
-function createLineRaw(parsedInput, findElementDomPosition) {
+    ElementDomModelRepositoryImpl.prototype.findPackageType = function () {
+        return this.domList.filter(function (v) { return v.type == postit.Type.package; });
+    };
+    return ElementDomModelRepositoryImpl;
+}());
+function createLineRaw(parsedInput, elementDomModelRepository) {
     var lineList = [];
     parsedInput.forEach(function (v) {
-        var from = findElementDomPosition(v.package.value);
+        var from = elementDomModelRepository.findByPackage(v.package);
         v.dependences
-            .map(function (d) { return new dom.LineModel(from, findElementDomPosition(d.value)); })
+            .map(function (d) { return new dom.LineModel(from, elementDomModelRepository.findByPackage(d)); })
             .map(function (d) { return d.getSvgLine(); })
             .map(function (d) { return "<polyline points=\"" + d.x1 + "," + d.y1 + " " + d.x2 + "," + d.y2 + "\"  />"; })
             .forEach(function (t) { return lineList.push(t); });
     });
     return lineList.join('\n');
 }
-function createSvg(viewBoxSize, findElementDomPosition, parsedInput) {
-    var lineRaw = createLineRaw(parsedInput, findElementDomPosition);
+function createSvg(viewBoxSize, elementDomModelRepository, parsedInput) {
+    var lineRaw = createLineRaw(parsedInput, elementDomModelRepository);
     var textRaw = parsedInput
-        .map(function (v) { return findElementDomPosition(v.package.value); })
+        .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
         .map(function (v) {
         var t = v.text.value.trim().split('\n')
             .filter(function (v) { return v.trim().length > 0; })
@@ -240,8 +260,29 @@ function createSvg(viewBoxSize, findElementDomPosition, parsedInput) {
     })
         .join('\n');
     var rectRaw = parsedInput
-        .map(function (v) { return findElementDomPosition(v.package.value); })
+        .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
         .map(function (v) { return "<rect x=\"" + v.x + "\" y=\"" + v.y + "\" rx=\"3\" ry=\"3\" width=\"" + v.width + "\" height=\"" + v.height + "\" />"; })
         .join('\n');
-    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxSize.width + " " + viewBoxSize.height + "\">\n  <defs>\n    <style>\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
+    var packageTextRaw = elementDomModelRepository.findPackageType()
+        .map(function (v) { return "<text dx=\"24\" dy=\"24\" x=\"" + v.x + "\" y=\"" + v.y + "\" font-size=\"11\">" + v.name.value + "</text>"; })
+        .join('\n');
+    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxSize.width + " " + viewBoxSize.height + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"package-text-group\">" + packageTextRaw + "</g>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
+}
+// ----------------------------------
+// これより下は document に触れる系
+function querySelectorAll(selector) {
+    var l = document.querySelectorAll(selector);
+    l.filter = Array.prototype.filter;
+    l.map = Array.prototype.map;
+    l.forEach = Array.prototype.forEach;
+    return l;
+}
+function main(input) {
+    // テキスト計算用DOMを作る
+    document.querySelector('#root').innerHTML = dom.createHtml(input);
+    var elementDomModelRepository = new ElementDomModelRepositoryImpl([document.querySelector('.screen').getBoundingClientRect()].map(function (s) { return ({ x: window.scrollX + s.left, y: window.scrollY + s.top }); })[0], querySelectorAll('li'), querySelectorAll('ul'));
+    var svg = createSvg([document.querySelector('#root')].map(function (v) { return ({ width: v.clientWidth, height: v.clientHeight }); })[0], elementDomModelRepository, postit.parse(input));
+    // テキスト計算用DOM削除
+    document.querySelector('#root').innerHTML = '';
+    return svg;
 }

@@ -28,6 +28,7 @@
     padding-right: 12px;
     margin: 4px;
     color: #333;
+    vertical-align: top;
   }
 
   li:before {
@@ -66,32 +67,35 @@
 
 <h1>入力</h1>
 <textarea id="inputArea" class="inputArea">
-{
-  "domain": {
-    "member": {
-      "Entity": { "text": "会員エンティティ", "dependences": ["$.vo.Id"] },
-      "vo": {
-        "Id": { "text": "会員ID" }
-      }
-    },
-    "contract": {
-      "Entity": { "text": "契約エンティティ\nほげ\nふーーー\nばーーー", "dependences": [ "$.vo.Id", "domain.member.vo.Id", "$.vo.State", "$.vo.StartDate", "$.vo.EndDate"] },
-      "vo": {
-        "Id": { "text": "契約ID" },
-        "State": { "text": "契約状態" },
-        "StartDate": { "text": "契約開始日" },
-        "EndDate": { "text": "契約開始日" }
-      }
-    },
-    "option": {
-      "Entity": { "text": "オプションエンティティ", "dependences": [ "$.vo.Id", "domain.contract.vo.Id", "$.vo.Type" ] },
-      "vo": {
-        "Id": { "text": "オプションID", "dependences": [ "$.Type" ] },
-        "Type": { "text": "オプションタイプ" }
+  {
+    "domain": {
+      "member": {
+        "Entity": { "text": "会員エンティティ", "dependences": ["$.vo.Id"] },
+        "vo": {
+          "Id": { "text": "会員ID" }
+        }
+      },
+      "contract": {
+        "Entity": { "text": "契約エンティティ\nほげ\nふーーー\nばーーー", "dependences": [ "$.vo.Id", "domain.member.vo.Id", "$.vo.State", "$.vo.term.StartDate", "$.vo.term.EndDate"] },
+        "vo": {
+          "Id": { "text": "契約ID" },
+          "State": { "text": "契約状態", "margin-left":40 },
+          "term": {
+          "StartDate": { "text": "契約開始日" },
+          "EndDate": { "text": "契約開始日" }
+          }
+        }
+      },
+      "option": {
+        "Entity": { "text": "オプションエンティティ", "dependences": [ "$.vo.Id", "domain.contract.vo.Id", "$.vo.Type" ] },
+        "vo": {
+          "Id": { "text": "オプションID", "dependences": [ "$.Type" ] },
+          "Type": { "text": "オプションタイプ", "margin-top":40  }
+        }
       }
     }
   }
-}
+  
 </textarea>
 <button id="applyButton" class="applyButton">apply</button>
 
@@ -103,44 +107,12 @@
 </div>
 <script>
 
-
-function main(input) {
-
-  function querySelectorAll(selector) {
-    var l = document.querySelectorAll(selector);
-    l.filter = Array.prototype.filter;
-    l.map = Array.prototype.map;
-    l.forEach = Array.prototype.forEach;
-    return l;
-  }
-
-  // テキスト計算用DOMを作る
-  document.querySelector('#root').innerHTML = dom.createHtml(input);
-
-  const findElementDomPosition = createFindElementDomPosition(
-    [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0],
-    querySelectorAll('li')
-  );
-
-  const svg = createSvg(
-    [document.querySelector('#root')].map(v => ({width: v.clientWidth, height: v.clientHeight}))[0],
-    findElementDomPosition,
-    postit.parse(input)
-  );
-
-  document.querySelector('.line-layer').innerHTML = svg;
-  document.querySelector('#outputArea').value = svg;
-
-  // テキスト計算用DOM削除
-  document.querySelector('#root').innerHTML = '';
-}
-
 function apply() {
-  // var input = JSON.parse(document.querySelector('#inputArea').value);
-  // main(input);
   try {
     var input = JSON.parse(document.querySelector('#inputArea').value);
-    main(input);
+    var svg = main(input);
+    document.querySelector('.line-layer').innerHTML = svg;
+    document.querySelector('#outputArea').value = svg;
   } catch(e) {
     alert(e);
   }

@@ -34,7 +34,7 @@ module postit {
   export class Text extends ddd.StringVo {
     private _type_Text() {}
   }
-  enum Type { package, element }
+  export enum Type { package, element }
   export class Node {
     readonly package: Package
     readonly type: Type
@@ -93,7 +93,9 @@ module postit {
 
 module dom {
   export class ElementDomModel {
+    readonly type:postit.Type;
     readonly package:postit.Package;
+    readonly name:postit.Name;
     readonly text:postit.Text;
     readonly x: number;
     readonly y: number;
@@ -103,8 +105,10 @@ module dom {
     readonly height: number;
     readonly right: number;
     readonly bottom: number;
-    constructor(p:postit.Package, t:postit.Text, x:number, y:number, cX:number, cY:number, w:number, h:number) {
+    constructor(type:postit.Type, p:postit.Package, n:postit.Name, t:postit.Text, x:number, y:number, cX:number, cY:number, w:number, h:number) {
+      this.type = type;
       this.package = p;
+      this.name = n;
       this.text = t;
       this.x = x;
       this.y = y;
@@ -144,7 +148,8 @@ module dom {
     }
   }
 
-  export function createHtml(data, path) {
+  // 本当はここでdomを使わずに計算的に位置を決定したい
+  export function createHtml(data, path?) {
     var memo = '';
     Object.keys(data)
       .map(key => {
@@ -152,21 +157,38 @@ module dom {
         const currentPath = path ? `${path}.${key}` : key;
         if(postit.isElement(key)) {
           let text = value.text.split('\n').map((v, i) => i == 0 ? `${v}` : `<p>${v}</p>`).join('\n');
-          memo += `<li data-package="${currentPath}" data-name="${key}">${text}</li>\n`;
+          let style = ['margin-left', 'margin-top']
+            .filter(key => value[key])
+            .map(key => `${key}:${value[key]}px`)
+            .join(';');
+          
+          memo += `<li data-package="${currentPath}" data-name="${key}" style="${style}">${text}</li>\n`;
         } else if(postit.isNode(key, value)) {
-          memo += `<ul data-package="${currentPath}" data-name="${key}">${createHtml(value, currentPath)}</ul>\n`;
+          memo += `<ul class="package" data-package="${currentPath}" data-name="${key}">${createHtml(value, currentPath)}</ul>\n`;
         }
       });
     return memo;
   }
 }
-
-function createFindElementDomPosition(offset, liList): (string)=>dom.ElementDomModel {
-  var screenPos = offset;
-  var domList = liList
-    .map(v => ({ package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text:v.innerText}))
+interface ElementDomModelRepository {
+  findByPackage(p:postit.Package): dom.ElementDomModel;
+  findPackageType(): dom.ElementDomModel[]
+}
+class ElementDomModelRepositoryImpl implements ElementDomModelRepository {
+  readonly domList: dom.ElementDomModel[]
+  constructor(offset, liList, ulList) {
+    var screenPos = offset;
+  var list = [];
+  liList.forEach(v => list.push(v));
+  if(ulList) {
+    ulList.forEach(v => list.push(v));
+  }
+  this.domList = list
+    .map(v => ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text:v.innerText, name:v.getAttribute('data-name')}))
     .map(v => ({
+      tagName:v.tagName,
       package:v.package,
+      name: v.name,
       text:v.text,
       x: window.scrollX + v.rect.left - screenPos.x,
       y: window.scrollY + v.rect.top - screenPos.y,
@@ -176,7 +198,9 @@ function createFindElementDomPosition(offset, liList): (string)=>dom.ElementDomM
       h: v.rect.height
     }))
     .map(v => new dom.ElementDomModel(
+      v.tagName == 'UL' ? postit.Type.package : postit.Type.element,
       new postit.Package(v.package),
+      new postit.Name(v.name),
       new postit.Text(v.text),
       v.x,
       v.y,
@@ -185,22 +209,26 @@ function createFindElementDomPosition(offset, liList): (string)=>dom.ElementDomM
       v.w,
       v.h)
     );
+  }
 
-    return (p) => {
-      var a = domList.filter(v => v.package.value == p);
-      if(a.length == 0) {
-        throw new Error(`dom not found: ${p}`);
-      }
-      return a[0];
-    };
+  findByPackage(p:postit.Package): dom.ElementDomModel {
+    const a = this.domList.filter(v => v.package.value == p.value);
+    if(a.length == 0) {
+      throw new Error(`dom not found: ${p}`);
+    }
+    return a[0];
+  }
+  findPackageType(): dom.ElementDomModel[] {
+    return this.domList.filter(v => v.type == postit.Type.package);
+  }
 }
 
-function createLineRaw(parsedInput, findElementDomPosition) {
+function createLineRaw(parsedInput, elementDomModelRepository: ElementDomModelRepository) {
   var lineList = [];
   parsedInput.forEach(v => {
-    var from = findElementDomPosition(v.package.value);
+    var from = elementDomModelRepository.findByPackage(v.package);
     v.dependences
-      .map(d => new dom.LineModel(from, findElementDomPosition(d.value)))
+      .map(d => new dom.LineModel(from, elementDomModelRepository.findByPackage(d)))
       .map(d => d.getSvgLine())
       .map(d => `<polyline points="${d.x1},${d.y1} ${d.x2},${d.y2}"  />`)
       .forEach(t => lineList.push(t))
@@ -210,12 +238,12 @@ function createLineRaw(parsedInput, findElementDomPosition) {
 
 function createSvg(
   viewBoxSize: {width, height},
-  findElementDomPosition: (string)=>dom.ElementDomModel,
+  elementDomModelRepository: ElementDomModelRepository,
   parsedInput:postit.Node[]
 ) {
-  const lineRaw = createLineRaw(parsedInput, findElementDomPosition);
+  const lineRaw = createLineRaw(parsedInput, elementDomModelRepository);
   const textRaw = parsedInput
-    .map(v => findElementDomPosition(v.package.value))
+    .map(v => elementDomModelRepository.findByPackage(v.package))
     .map(v => {
       var t = v.text.value.trim().split('\n')
         .filter(v => v.trim().length > 0)
@@ -237,14 +265,23 @@ function createSvg(
     .join('\n');
 
   const rectRaw = parsedInput
-    .map(v => findElementDomPosition(v.package.value))
+    .map(v => elementDomModelRepository.findByPackage(v.package))
     .map(v => `<rect x="${v.x}" y="${v.y}" rx="3" ry="3" width="${v.width}" height="${v.height}" />`)
+    .join('\n');
+
+  
+  const packageTextRaw = elementDomModelRepository.findPackageType()
+    .map(v => `<text dx="24" dy="24" x="${v.x}" y="${v.y}" font-size="11">${v.name.value}</text>`)
     .join('\n');
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" id="svgCanvas" viewBox="0 0 ${viewBoxSize.width} ${viewBoxSize.height}">
   <defs>
     <style>
+    #package-text-group {
+      stroke:#333;
+      dominant-baseline:text-before-edge;
+    }
     #rect-group {
       stroke:#880;
       fill:#ff8
@@ -265,10 +302,43 @@ function createSvg(
       <path d="M 0 0 L 10 5 L 0 10 z" />
     </marker>
   </defs>
+  <g id="package-text-group">${packageTextRaw}</g>
   <g id="rect-group">${rectRaw}</g>
   <g id="text-group">${textRaw}</g>
   <g id="line-group">${lineRaw}</g>
 </svg>
   `.trim();
 
+}
+
+// ----------------------------------
+// これより下は document に触れる系
+
+function querySelectorAll(selector) {
+  var l = document.querySelectorAll(selector);
+  l.filter = Array.prototype.filter;
+  l.map = Array.prototype.map;
+  l.forEach = Array.prototype.forEach;
+  return l;
+}
+
+function main(input) {
+  // テキスト計算用DOMを作る
+  document.querySelector('#root').innerHTML = dom.createHtml(input);
+
+  const elementDomModelRepository = new ElementDomModelRepositoryImpl(
+    [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0],
+    querySelectorAll('li'),
+    querySelectorAll('ul')
+  );
+  
+  const svg = createSvg(
+    [document.querySelector('#root')].map(v => ({width: v.clientWidth, height: v.clientHeight}))[0],
+    elementDomModelRepository,
+    postit.parse(input)
+  );
+
+  // テキスト計算用DOM削除
+  document.querySelector('#root').innerHTML = '';
+  return svg;
 }
