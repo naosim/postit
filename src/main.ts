@@ -37,20 +37,24 @@ module postit {
   export enum Type { package, element }
   export class Node {
     readonly package: Package
+    readonly name: Name
     readonly type: Type
-    constructor(p: Package, t:Type) {
+    constructor(p: Package, n: Name, t: Type) {
       this.package = p;
+      this.name = n;
       this.type = t;
     }
+    private _type_Node() {}
   }
   class Element extends Node {
     readonly text: Text
     readonly dependences: Package[]
-    constructor(p: Package, t:Type, text: Text, dependences: Package[]) {
-      super(p, t);
+    constructor(p: Package, n: Name, t:Type, text: Text, dependences: Package[]) {
+      super(p, n, t);
       this.text = text;
       this.dependences = dependences;
     }
+    private _type_Element() {}
   }
 
   export function isNode(key:string, value:any) {
@@ -78,6 +82,7 @@ module postit {
           nodes.push(
             new Element(
               currentPackage,
+              new Name(key),
               Type.element,
               new Text(value.text),
               (value.dependences || value.dep || []).map(v => new Package(v[0] !== '$' ? v : v.split('$').join(package.value)))
@@ -147,80 +152,11 @@ module dom {
       }
     }
   }
-
-  // 本当はここでdomを使わずに計算的に位置を決定したい
-  export function createHtml(data, path?) {
-    var memo = '';
-    Object.keys(data)
-      .map(key => {
-        const value = data[key];
-        const currentPath = path ? `${path}.${key}` : key;
-        if(postit.isElement(key)) {
-          let text = value.text.split('\n').map((v, i) => i == 0 ? `${v}` : `<p>${v}</p>`).join('\n');
-          let style = ['margin-left', 'margin-top']
-            .filter(key => value[key])
-            .map(key => `${key}:${value[key]}px`)
-            .join(';');
-          
-          memo += `<li data-package="${currentPath}" data-name="${key}" style="${style}">${text}</li>\n`;
-        } else if(postit.isNode(key, value)) {
-          memo += `<ul class="package" data-package="${currentPath}" data-name="${key}">${createHtml(value, currentPath)}</ul>\n`;
-        }
-      });
-    return memo;
-  }
 }
 interface ElementDomModelRepository {
   findByPackage(p:postit.Package): dom.ElementDomModel;
-  findPackageType(): dom.ElementDomModel[]
-}
-class ElementDomModelRepositoryImpl implements ElementDomModelRepository {
-  readonly domList: dom.ElementDomModel[]
-  constructor(offset, liList, ulList) {
-    var screenPos = offset;
-  var list = [];
-  liList.forEach(v => list.push(v));
-  if(ulList) {
-    ulList.forEach(v => list.push(v));
-  }
-  this.domList = list
-    .map(v => ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text:v.innerText, name:v.getAttribute('data-name')}))
-    .map(v => ({
-      tagName:v.tagName,
-      package:v.package,
-      name: v.name,
-      text:v.text,
-      x: window.scrollX + v.rect.left - screenPos.x,
-      y: window.scrollY + v.rect.top - screenPos.y,
-      centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
-      centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
-      w: v.rect.width,
-      h: v.rect.height
-    }))
-    .map(v => new dom.ElementDomModel(
-      v.tagName == 'UL' ? postit.Type.package : postit.Type.element,
-      new postit.Package(v.package),
-      new postit.Name(v.name),
-      new postit.Text(v.text),
-      v.x,
-      v.y,
-      v.centerX,
-      v.centerY,
-      v.w,
-      v.h)
-    );
-  }
-
-  findByPackage(p:postit.Package): dom.ElementDomModel {
-    const a = this.domList.filter(v => v.package.value == p.value);
-    if(a.length == 0) {
-      throw new Error(`dom not found: ${p}`);
-    }
-    return a[0];
-  }
-  findPackageType(): dom.ElementDomModel[] {
-    return this.domList.filter(v => v.type == postit.Type.package);
-  }
+  findPackageType(): dom.ElementDomModel[];
+  getViewBoxSize(): {width, height};
 }
 
 function createLineRaw(parsedInput, elementDomModelRepository: ElementDomModelRepository) {
@@ -322,23 +258,94 @@ function querySelectorAll(selector) {
   return l;
 }
 
-function main(input) {
-  // テキスト計算用DOMを作る
-  document.querySelector('#root').innerHTML = dom.createHtml(input);
+class ElementDomModelRepositoryFromRealDom implements ElementDomModelRepository {
+  readonly domList: dom.ElementDomModel[]
+  readonly viewBoxSize: {width, height}
+  constructor(data) {
+    // テキスト計算用DOMを作る
+    document.querySelector('#root').innerHTML = ElementDomModelRepositoryFromRealDom.createHtml(data);
 
-  const elementDomModelRepository = new ElementDomModelRepositoryImpl(
-    [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0],
-    querySelectorAll('li'),
-    querySelectorAll('ul')
-  );
+    var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0];
+    var list = [];
+    querySelectorAll('li').forEach(v => list.push(v));
+    querySelectorAll('ul').forEach(v => list.push(v));
+    this.domList = list
+      .map(v => ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text:v.innerText, name:v.getAttribute('data-name')}))
+      .map(v => ({
+        tagName:v.tagName,
+        package:v.package,
+        name: v.name,
+        text:v.text,
+        x: window.scrollX + v.rect.left - screenPos.x,
+        y: window.scrollY + v.rect.top - screenPos.y,
+        centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
+        centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
+        w: v.rect.width,
+        h: v.rect.height
+      }))
+      .map(v => new dom.ElementDomModel(
+        v.tagName == 'UL' ? postit.Type.package : postit.Type.element,
+        new postit.Package(v.package),
+        new postit.Name(v.name),
+        new postit.Text(v.text),
+        v.x,
+        v.y,
+        v.centerX,
+        v.centerY,
+        v.w,
+        v.h)
+      );
+
+    this.viewBoxSize = [document.querySelector('#root')].map(v => ({width: v.clientWidth, height: v.clientHeight}))[0]
+
+    // テキスト計算用DOM削除
+    document.querySelector('#root').innerHTML = '';
+  }
+
+  static createHtml(data, path?) {
+    var memo = '';
+    Object.keys(data)
+      .map(key => {
+        const value = data[key];
+        const currentPath = path ? `${path}.${key}` : key;
+        if(postit.isElement(key)) {
+          let text = value.text.split('\n').map((v, i) => i == 0 ? `${v}` : `<p>${v}</p>`).join('\n');
+          let style = ['margin-left', 'margin-top']
+            .filter(key => value[key])
+            .map(key => `${key}:${value[key]}px`)
+            .join(';');
+          
+          memo += `<li data-package="${currentPath}" data-name="${key}" style="${style}">${text}</li>\n`;
+        } else if(postit.isNode(key, value)) {
+          memo += `<ul class="package" data-package="${currentPath}" data-name="${key}">${ElementDomModelRepositoryFromRealDom.createHtml(value, currentPath)}</ul>\n`;
+        }
+      });
+    return memo;
+  }
+
+  findByPackage(p:postit.Package): dom.ElementDomModel {
+    const a = this.domList.filter(v => v.package.value == p.value);
+    if(a.length == 0) {
+      throw new Error(`dom not found: ${p}`);
+    }
+    return a[0];
+  }
+  findPackageType(): dom.ElementDomModel[] {
+    return this.domList.filter(v => v.type == postit.Type.package);
+  }
+
+  getViewBoxSize(): {width, height} {
+    return this.viewBoxSize;
+  }
+}
+
+function main(input) {
+  const elementDomModelRepository = new ElementDomModelRepositoryFromRealDom(input);
   
   const svg = createSvg(
-    [document.querySelector('#root')].map(v => ({width: v.clientWidth, height: v.clientHeight}))[0],
+    elementDomModelRepository.getViewBoxSize(),
     elementDomModelRepository,
     postit.parse(input)
   );
-
-  // テキスト計算用DOM削除
-  document.querySelector('#root').innerHTML = '';
   return svg;
 }

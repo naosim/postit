@@ -68,8 +68,9 @@ var postit;
         Type[Type["element"] = 1] = "element";
     })(Type = postit.Type || (postit.Type = {}));
     var Node = /** @class */ (function () {
-        function Node(p, t) {
+        function Node(p, n, t) {
             this.package = p;
+            this.name = n;
             this.type = t;
         }
         return Node;
@@ -77,8 +78,8 @@ var postit;
     postit.Node = Node;
     var Element = /** @class */ (function (_super) {
         __extends(Element, _super);
-        function Element(p, t, text, dependences) {
-            var _this = _super.call(this, p, t) || this;
+        function Element(p, n, t, text, dependences) {
+            var _this = _super.call(this, p, n, t) || this;
             _this.text = text;
             _this.dependences = dependences;
             return _this;
@@ -107,7 +108,7 @@ var postit;
             var value = data[key];
             var currentPackage = package ? package.append(new Name(key)) : new Package(key);
             if (isElement(key)) {
-                nodes.push(new Element(currentPackage, Type.element, new Text(value.text), (value.dependences || value.dep || []).map(function (v) { return new Package(v[0] !== '$' ? v : v.split('$').join(package.value)); })));
+                nodes.push(new Element(currentPackage, new Name(key), Type.element, new Text(value.text), (value.dependences || value.dep || []).map(function (v) { return new Package(v[0] !== '$' ? v : v.split('$').join(package.value)); })));
             }
             else if (isNode(key, value)) {
                 nodes = parse(value, currentPackage).reduce(function (m, n) { m.push(n); return m; }, nodes);
@@ -163,65 +164,7 @@ var dom;
         return LineModel;
     }());
     dom.LineModel = LineModel;
-    // 本当はここでdomを使わずに計算的に位置を決定したい
-    function createHtml(data, path) {
-        var memo = '';
-        Object.keys(data)
-            .map(function (key) {
-            var value = data[key];
-            var currentPath = path ? path + "." + key : key;
-            if (postit.isElement(key)) {
-                var text = value.text.split('\n').map(function (v, i) { return i == 0 ? "" + v : "<p>" + v + "</p>"; }).join('\n');
-                var style = ['margin-left', 'margin-top']
-                    .filter(function (key) { return value[key]; })
-                    .map(function (key) { return key + ":" + value[key] + "px"; })
-                    .join(';');
-                memo += "<li data-package=\"" + currentPath + "\" data-name=\"" + key + "\" style=\"" + style + "\">" + text + "</li>\n";
-            }
-            else if (postit.isNode(key, value)) {
-                memo += "<ul class=\"package\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\">" + createHtml(value, currentPath) + "</ul>\n";
-            }
-        });
-        return memo;
-    }
-    dom.createHtml = createHtml;
 })(dom || (dom = {}));
-var ElementDomModelRepositoryImpl = /** @class */ (function () {
-    function ElementDomModelRepositoryImpl(offset, liList, ulList) {
-        var screenPos = offset;
-        var list = [];
-        liList.forEach(function (v) { return list.push(v); });
-        if (ulList) {
-            ulList.forEach(function (v) { return list.push(v); });
-        }
-        this.domList = list
-            .map(function (v) { return ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text: v.innerText, name: v.getAttribute('data-name') }); })
-            .map(function (v) { return ({
-            tagName: v.tagName,
-            package: v.package,
-            name: v.name,
-            text: v.text,
-            x: window.scrollX + v.rect.left - screenPos.x,
-            y: window.scrollY + v.rect.top - screenPos.y,
-            centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
-            centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
-            w: v.rect.width,
-            h: v.rect.height
-        }); })
-            .map(function (v) { return new dom.ElementDomModel(v.tagName == 'UL' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
-    }
-    ElementDomModelRepositoryImpl.prototype.findByPackage = function (p) {
-        var a = this.domList.filter(function (v) { return v.package.value == p.value; });
-        if (a.length == 0) {
-            throw new Error("dom not found: " + p);
-        }
-        return a[0];
-    };
-    ElementDomModelRepositoryImpl.prototype.findPackageType = function () {
-        return this.domList.filter(function (v) { return v.type == postit.Type.package; });
-    };
-    return ElementDomModelRepositoryImpl;
-}());
 function createLineRaw(parsedInput, elementDomModelRepository) {
     var lineList = [];
     parsedInput.forEach(function (v) {
@@ -277,12 +220,70 @@ function querySelectorAll(selector) {
     l.forEach = Array.prototype.forEach;
     return l;
 }
+var ElementDomModelRepositoryFromRealDom = /** @class */ (function () {
+    function ElementDomModelRepositoryFromRealDom(data) {
+        // テキスト計算用DOMを作る
+        document.querySelector('#root').innerHTML = ElementDomModelRepositoryFromRealDom.createHtml(data);
+        var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(function (s) { return ({ x: window.scrollX + s.left, y: window.scrollY + s.top }); })[0];
+        var list = [];
+        querySelectorAll('li').forEach(function (v) { return list.push(v); });
+        querySelectorAll('ul').forEach(function (v) { return list.push(v); });
+        this.domList = list
+            .map(function (v) { return ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text: v.innerText, name: v.getAttribute('data-name') }); })
+            .map(function (v) { return ({
+            tagName: v.tagName,
+            package: v.package,
+            name: v.name,
+            text: v.text,
+            x: window.scrollX + v.rect.left - screenPos.x,
+            y: window.scrollY + v.rect.top - screenPos.y,
+            centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
+            centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
+            w: v.rect.width,
+            h: v.rect.height
+        }); })
+            .map(function (v) { return new dom.ElementDomModel(v.tagName == 'UL' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
+        this.viewBoxSize = [document.querySelector('#root')].map(function (v) { return ({ width: v.clientWidth, height: v.clientHeight }); })[0];
+        // テキスト計算用DOM削除
+        document.querySelector('#root').innerHTML = '';
+    }
+    ElementDomModelRepositoryFromRealDom.createHtml = function (data, path) {
+        var memo = '';
+        Object.keys(data)
+            .map(function (key) {
+            var value = data[key];
+            var currentPath = path ? path + "." + key : key;
+            if (postit.isElement(key)) {
+                var text = value.text.split('\n').map(function (v, i) { return i == 0 ? "" + v : "<p>" + v + "</p>"; }).join('\n');
+                var style = ['margin-left', 'margin-top']
+                    .filter(function (key) { return value[key]; })
+                    .map(function (key) { return key + ":" + value[key] + "px"; })
+                    .join(';');
+                memo += "<li data-package=\"" + currentPath + "\" data-name=\"" + key + "\" style=\"" + style + "\">" + text + "</li>\n";
+            }
+            else if (postit.isNode(key, value)) {
+                memo += "<ul class=\"package\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\">" + ElementDomModelRepositoryFromRealDom.createHtml(value, currentPath) + "</ul>\n";
+            }
+        });
+        return memo;
+    };
+    ElementDomModelRepositoryFromRealDom.prototype.findByPackage = function (p) {
+        var a = this.domList.filter(function (v) { return v.package.value == p.value; });
+        if (a.length == 0) {
+            throw new Error("dom not found: " + p);
+        }
+        return a[0];
+    };
+    ElementDomModelRepositoryFromRealDom.prototype.findPackageType = function () {
+        return this.domList.filter(function (v) { return v.type == postit.Type.package; });
+    };
+    ElementDomModelRepositoryFromRealDom.prototype.getViewBoxSize = function () {
+        return this.viewBoxSize;
+    };
+    return ElementDomModelRepositoryFromRealDom;
+}());
 function main(input) {
-    // テキスト計算用DOMを作る
-    document.querySelector('#root').innerHTML = dom.createHtml(input);
-    var elementDomModelRepository = new ElementDomModelRepositoryImpl([document.querySelector('.screen').getBoundingClientRect()].map(function (s) { return ({ x: window.scrollX + s.left, y: window.scrollY + s.top }); })[0], querySelectorAll('li'), querySelectorAll('ul'));
-    var svg = createSvg([document.querySelector('#root')].map(function (v) { return ({ width: v.clientWidth, height: v.clientHeight }); })[0], elementDomModelRepository, postit.parse(input));
-    // テキスト計算用DOM削除
-    document.querySelector('#root').innerHTML = '';
+    var elementDomModelRepository = new ElementDomModelRepositoryFromRealDom(input);
+    var svg = createSvg(elementDomModelRepository.getViewBoxSize(), elementDomModelRepository, postit.parse(input));
     return svg;
 }
