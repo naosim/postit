@@ -179,27 +179,31 @@ function createLineRaw(parsedInput, elementDomModelRepository) {
     });
     return lineList.join('\n');
 }
-function createSvg(viewBoxSize, elementDomModelRepository, parsedInput) {
+function createSvg(elementDomModelRepository, parsedInput) {
     var lineRaw = createLineRaw(parsedInput, elementDomModelRepository);
     var textRaw = querySelectorAll('#svgCalcCanvas>text').map(function (v) { return v.outerHTML; }).join('\n');
     var rectRaw = parsedInput
         .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
-        .map(function (v) {
-        console.log(v);
-        return v;
-    })
         .map(function (v) { return "<rect x=\"" + v.x + "\" y=\"" + v.y + "\" rx=\"3\" ry=\"3\" width=\"" + v.width + "\" height=\"" + v.height + "\" />"; })
         .join('\n');
-    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxSize.width + " " + viewBoxSize.height + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
+    var viewBoxWidth = parsedInput
+        .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
+        .map(function (v) { return v.right; })
+        .reduce(function (memo, v) { return Math.max(memo, v); }, 0) + 48;
+    var viewBoxHeight = parsedInput
+        .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
+        .map(function (v) { return v.bottom; })
+        .reduce(function (memo, v) { return Math.max(memo, v); }, 0) + 48;
+    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxWidth + " " + viewBoxHeight + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
 }
 var ElementDomModelRepositoryLogic = /** @class */ (function () {
     function ElementDomModelRepositoryLogic(data) {
-        this.viewBoxSize = [document.querySelector('.screen')].map(function (v) { return ({ width: v.clientWidth, height: 1000 }); })[0];
-        document.querySelector('#calc').innerHTML = ("\n    <svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCalcCanvas\" viewBox=\"0 0 " + this.viewBoxSize.width + " " + this.viewBoxSize.height + "\">\n      <defs>\n        <style>\n        text {\n          dominant-baseline:text-before-edge;\n        }\n        </style>\n      </defs>\n      " + ElementDomModelRepositoryLogic.createSizeDecideSvg(data) + "\n    </svg>\n      ").trim();
+        var viewBoxSize = [document.querySelector('.screen')].map(function (v) { return ({ width: v.clientWidth, height: 1000 }); })[0];
+        document.querySelector('#calc').innerHTML = ("\n    <svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCalcCanvas\" viewBox=\"0 0 " + viewBoxSize.width + " " + viewBoxSize.height + "\">\n      <defs>\n        <style>\n        #svgCalcCanvas {\n          opacity:0;\n        }\n        text {\n          dominant-baseline:text-before-edge;\n        }\n        </style>\n      </defs>\n      " + ElementDomModelRepositoryLogic.createSizeDecideSvg(data) + "\n    </svg>\n      ").trim();
         var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(function (s) { return ({ x: window.scrollX + s.left, y: window.scrollY + s.top }); })[0];
         var list = [];
         querySelectorAll('#svgCalcCanvas>text').forEach(function (v) { return list.push(v); });
-        ElementDomModelRepositoryLogic.setupText(this.viewBoxSize);
+        ElementDomModelRepositoryLogic.setupText(viewBoxSize);
         var marginX = 16;
         var marginY = 8;
         this.domList = list
@@ -285,9 +289,6 @@ var ElementDomModelRepositoryLogic = /** @class */ (function () {
     ElementDomModelRepositoryLogic.prototype.findPackageType = function () {
         return this.domList.filter(function (v) { return v.type == postit.Type.package; });
     };
-    ElementDomModelRepositoryLogic.prototype.getViewBoxSize = function () {
-        return this.viewBoxSize;
-    };
     return ElementDomModelRepositoryLogic;
 }());
 // ----------------------------------
@@ -301,6 +302,6 @@ function querySelectorAll(selector) {
 }
 function main(input) {
     var elementDomModelRepository = new ElementDomModelRepositoryLogic(input);
-    var svg = createSvg(elementDomModelRepository.getViewBoxSize(), elementDomModelRepository, postit.parse(input));
+    var svg = createSvg(elementDomModelRepository, postit.parse(input));
     return svg;
 }

@@ -156,7 +156,6 @@ module dom {
 interface ElementDomModelRepository {
   findByPackage(p:postit.Package): dom.ElementDomModel;
   findPackageType(): dom.ElementDomModel[];
-  getViewBoxSize(): {width, height};
 }
 
 function createLineRaw(parsedInput, elementDomModelRepository: ElementDomModelRepository) {
@@ -173,7 +172,6 @@ function createLineRaw(parsedInput, elementDomModelRepository: ElementDomModelRe
 }
 
 function createSvg(
-  viewBoxSize: {width, height},
   elementDomModelRepository: ElementDomModelRepository,
   parsedInput:postit.Node[]
 ) {
@@ -181,15 +179,21 @@ function createSvg(
   const textRaw = querySelectorAll('#svgCalcCanvas>text').map(v => v.outerHTML).join('\n');
   const rectRaw = parsedInput
     .map(v => elementDomModelRepository.findByPackage(v.package))
-    .map(v => {
-      console.log(v);
-      return v;
-    })
     .map(v => `<rect x="${v.x}" y="${v.y}" rx="3" ry="3" width="${v.width}" height="${v.height}" />`)
     .join('\n');
 
+    const viewBoxWidth = parsedInput
+    .map(v => elementDomModelRepository.findByPackage(v.package))
+    .map(v => v.right)
+    .reduce((memo, v) => Math.max(memo, v), 0) + 48;
+
+    const viewBoxHeight = parsedInput
+    .map(v => elementDomModelRepository.findByPackage(v.package))
+    .map(v => v.bottom)
+    .reduce((memo, v) => Math.max(memo, v), 0) + 48;
+
   return `
-<svg xmlns="http://www.w3.org/2000/svg" id="svgCanvas" viewBox="0 0 ${viewBoxSize.width} ${viewBoxSize.height}">
+<svg xmlns="http://www.w3.org/2000/svg" id="svgCanvas" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
   <defs>
     <style>
     #package-text-group {
@@ -226,14 +230,16 @@ function createSvg(
 
 class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
   readonly domList: dom.ElementDomModel[]
-  readonly viewBoxSize: {width, height}
   constructor(data) {
-    this.viewBoxSize = [document.querySelector('.screen')].map(v => ({width: v.clientWidth, height: 1000}))[0]
+    const viewBoxSize = [document.querySelector('.screen')].map(v => ({width: v.clientWidth, height: 1000}))[0]
 
     document.querySelector('#calc').innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" id="svgCalcCanvas" viewBox="0 0 ${this.viewBoxSize.width} ${this.viewBoxSize.height}">
+    <svg xmlns="http://www.w3.org/2000/svg" id="svgCalcCanvas" viewBox="0 0 ${viewBoxSize.width} ${viewBoxSize.height}">
       <defs>
         <style>
+        #svgCalcCanvas {
+          opacity:0;
+        }
         text {
           dominant-baseline:text-before-edge;
         }
@@ -246,7 +252,7 @@ class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
     var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0];
     var list = [];
     querySelectorAll('#svgCalcCanvas>text').forEach(v => list.push(v));
-    ElementDomModelRepositoryLogic.setupText(this.viewBoxSize);
+    ElementDomModelRepositoryLogic.setupText(viewBoxSize);
     const marginX = 16;
     const marginY = 8;
     this.domList = list
@@ -348,10 +354,6 @@ class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
   findPackageType(): dom.ElementDomModel[] {
     return this.domList.filter(v => v.type == postit.Type.package);
   }
-
-  getViewBoxSize(): {width, height} {
-    return this.viewBoxSize;
-  }
 }
 
 // ----------------------------------
@@ -369,7 +371,6 @@ function main(input) {
   const elementDomModelRepository = new ElementDomModelRepositoryLogic(input);
   
   const svg = createSvg(
-    elementDomModelRepository.getViewBoxSize(),
     elementDomModelRepository,
     postit.parse(input)
   );
