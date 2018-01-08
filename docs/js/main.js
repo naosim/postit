@@ -73,6 +73,7 @@ var postit;
             this.name = n;
             this.type = t;
         }
+        Node.prototype._type_Node = function () { };
         return Node;
     }());
     postit.Node = Node;
@@ -84,6 +85,7 @@ var postit;
             _this.dependences = dependences;
             return _this;
         }
+        Element.prototype._type_Element = function () { };
         return Element;
     }(Node));
     function isNode(key, value) {
@@ -144,7 +146,7 @@ var dom;
             this.to = to;
         }
         LineModel.prototype.getSvgLine = function () {
-            var dotMargin = 12;
+            var dotMargin = 8;
             var x1 = this.from.centerX;
             var y1 = this.from.centerY;
             if (this.to.centerY - this.from.centerY >= 0) {
@@ -179,38 +181,115 @@ function createLineRaw(parsedInput, elementDomModelRepository) {
 }
 function createSvg(viewBoxSize, elementDomModelRepository, parsedInput) {
     var lineRaw = createLineRaw(parsedInput, elementDomModelRepository);
-    var textRaw = parsedInput
-        .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
-        .map(function (v) {
-        var t = v.text.value.trim().split('\n')
-            .filter(function (v) { return v.trim().length > 0; })
-            .map(function (p, i) {
-            var dx = (i == 0 ? '4' : '19');
-            var dy;
-            if (i == 0) {
-                dy = '12';
-            }
-            else if (i == 1) {
-                dy = '20';
-            }
-            else {
-                dy = '16';
-            }
-            return "<tspan x=\"" + v.x + "\" dx=\"" + dx + "\" dy=\"" + dy + "\">" + (i == 0 ? '・' : '') + p + "</tspan>";
-        })
-            .join('');
-        return "<text dx=\"4\" x=\"" + v.x + "\" y=\"" + (v.y - 6) + "\">" + t + "</text>";
-    })
-        .join('\n');
+    var textRaw = querySelectorAll('#svgCalcCanvas>text').map(function (v) { return v.outerHTML; }).join('\n');
     var rectRaw = parsedInput
         .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
+        .map(function (v) {
+        console.log(v);
+        return v;
+    })
         .map(function (v) { return "<rect x=\"" + v.x + "\" y=\"" + v.y + "\" rx=\"3\" ry=\"3\" width=\"" + v.width + "\" height=\"" + v.height + "\" />"; })
         .join('\n');
-    var packageTextRaw = elementDomModelRepository.findPackageType()
-        .map(function (v) { return "<text dx=\"24\" dy=\"24\" x=\"" + v.x + "\" y=\"" + v.y + "\" font-size=\"11\">" + v.name.value + "</text>"; })
-        .join('\n');
-    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxSize.width + " " + viewBoxSize.height + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"package-text-group\">" + packageTextRaw + "</g>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
+    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxSize.width + " " + viewBoxSize.height + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
 }
+var ElementDomModelRepositoryLogic = /** @class */ (function () {
+    function ElementDomModelRepositoryLogic(data) {
+        this.viewBoxSize = [document.querySelector('.screen')].map(function (v) { return ({ width: v.clientWidth, height: 1000 }); })[0];
+        document.querySelector('#calc').innerHTML = ("\n    <svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCalcCanvas\" viewBox=\"0 0 " + this.viewBoxSize.width + " " + this.viewBoxSize.height + "\">\n      <defs>\n        <style>\n        text {\n          dominant-baseline:text-before-edge;\n        }\n        </style>\n      </defs>\n      " + ElementDomModelRepositoryLogic.createSizeDecideSvg(data) + "\n    </svg>\n      ").trim();
+        var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(function (s) { return ({ x: window.scrollX + s.left, y: window.scrollY + s.top }); })[0];
+        var list = [];
+        querySelectorAll('#svgCalcCanvas>text').forEach(function (v) { return list.push(v); });
+        ElementDomModelRepositoryLogic.setupText(this.viewBoxSize);
+        var marginX = 16;
+        var marginY = 8;
+        this.domList = list
+            .map(function (v) { return ({ tagName: v.tagName, package: v.getAttribute('data-package'), type: v.getAttribute('data-type'), rect: v.getBoundingClientRect(), text: v.innerText, name: v.getAttribute('data-name') }); })
+            .map(function (v) { return ({
+            tagName: v.tagName,
+            package: v.package,
+            type: v.type,
+            name: v.name,
+            text: v.text,
+            x: window.scrollX + v.rect.left - screenPos.x - marginX,
+            y: window.scrollY + v.rect.top - screenPos.y - marginY,
+            centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
+            centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
+            w: v.rect.width + marginX * 2,
+            h: v.rect.height + marginY * 2
+        }); })
+            .map(function (v) { return new dom.ElementDomModel(v.type == 'package' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
+    }
+    ElementDomModelRepositoryLogic.createSizeDecideSvg = function (data, path) {
+        var memo = '';
+        Object.keys(data)
+            .map(function (key) {
+            var value = data[key];
+            var currentPath = path ? path + "." + key : key;
+            if (postit.isElement(key)) {
+                var marginLeft = value['margin-left'] ? "margin-left=\"" + value['margin-left'] + "\"" : '';
+                var marginTop = value['margin-top'] ? "margin-top=\"" + value['margin-top'] + "\"" : '';
+                var text = value.text.indexOf('\n') == -1 ? value.text : value.text.split('\n').map(function (v, i) { return "<tspan x=\"0\" dx=\"0\" dy=\"" + (i == 0 ? '0' : '1.2') + "em\">" + v + "</tspan>"; }).join('\n');
+                memo += "<text id=\"" + currentPath + "\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\" data-type=\"element\" " + marginLeft + " " + marginTop + ">" + text + "</text>\n";
+            }
+            else if (postit.isNode(key, value)) {
+                memo += "<text  id=\"" + currentPath + "\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\" data-type=\"package\">" + key + "</text>\n";
+                memo += ElementDomModelRepositoryLogic.createSizeDecideSvg(value, currentPath);
+            }
+        });
+        return memo;
+    };
+    ElementDomModelRepositoryLogic.setupText = function (viewBoxSize) {
+        var marginX = 48;
+        var marginY = 24;
+        var lastPackage = { x: 0, y: 0, width: 0, height: 0 };
+        var lastElement = { x: 0, y: 0, width: 0, height: 0 };
+        var maxY = -1;
+        querySelectorAll('#svgCalcCanvas>text').forEach(function (v) {
+            var packageIndent = v.getAttribute('data-package').split('.').length * 24;
+            if (v.getAttribute('data-type') == 'package') {
+                var y = maxY + marginY;
+                v.setAttribute('x', packageIndent);
+                v.setAttribute('y', y);
+                lastPackage = v.getBBox();
+                maxY = lastPackage.y + lastPackage.height;
+                lastElement = { x: 0, y: 0, width: 0, height: 0 };
+            }
+            else if (v.getAttribute('data-type') == 'element') {
+                var userMarginLeft = v.getAttribute('margin-left') ? parseInt(v.getAttribute('margin-left')) : 0;
+                var userMarginTop = v.getAttribute('margin-top') ? parseInt(v.getAttribute('margin-top')) : 0;
+                var x = Math.max(packageIndent, lastElement.x + lastElement.width) + marginX + userMarginLeft;
+                var y = Math.max(lastPackage.y + lastPackage.height + marginY, lastElement.y + userMarginTop);
+                // 左端がはみ出した場合は改行する
+                if (x + v.getBBox().width > viewBoxSize.width) {
+                    x = packageIndent + marginX;
+                    y = maxY + marginY;
+                }
+                v.setAttribute('x', x);
+                v.setAttribute('y', y);
+                // サブテキスト更新
+                var sub = v.querySelectorAll('tspan');
+                sub.forEach = Array.prototype.forEach;
+                sub.forEach(function (s) { return s.setAttribute('x', v.getAttribute('x')); });
+                lastElement = v.getBBox();
+                maxY = Math.max(maxY, lastElement.y + lastElement.height);
+            }
+        });
+    };
+    ElementDomModelRepositoryLogic.prototype.findByPackage = function (p) {
+        var a = this.domList.filter(function (v) { return v.package.value == p.value; });
+        if (a.length == 0) {
+            throw new Error("dom not found: " + p);
+        }
+        return a[0];
+    };
+    ElementDomModelRepositoryLogic.prototype.findPackageType = function () {
+        return this.domList.filter(function (v) { return v.type == postit.Type.package; });
+    };
+    ElementDomModelRepositoryLogic.prototype.getViewBoxSize = function () {
+        return this.viewBoxSize;
+    };
+    return ElementDomModelRepositoryLogic;
+}());
 // ----------------------------------
 // これより下は document に触れる系
 function querySelectorAll(selector) {
@@ -220,70 +299,8 @@ function querySelectorAll(selector) {
     l.forEach = Array.prototype.forEach;
     return l;
 }
-var ElementDomModelRepositoryFromRealDom = /** @class */ (function () {
-    function ElementDomModelRepositoryFromRealDom(data) {
-        // テキスト計算用DOMを作る
-        document.querySelector('#root').innerHTML = ElementDomModelRepositoryFromRealDom.createHtml(data);
-        var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(function (s) { return ({ x: window.scrollX + s.left, y: window.scrollY + s.top }); })[0];
-        var list = [];
-        querySelectorAll('li').forEach(function (v) { return list.push(v); });
-        querySelectorAll('ul').forEach(function (v) { return list.push(v); });
-        this.domList = list
-            .map(function (v) { return ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text: v.innerText, name: v.getAttribute('data-name') }); })
-            .map(function (v) { return ({
-            tagName: v.tagName,
-            package: v.package,
-            name: v.name,
-            text: v.text,
-            x: window.scrollX + v.rect.left - screenPos.x,
-            y: window.scrollY + v.rect.top - screenPos.y,
-            centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
-            centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
-            w: v.rect.width,
-            h: v.rect.height
-        }); })
-            .map(function (v) { return new dom.ElementDomModel(v.tagName == 'UL' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
-        this.viewBoxSize = [document.querySelector('#root')].map(function (v) { return ({ width: v.clientWidth, height: v.clientHeight }); })[0];
-        // テキスト計算用DOM削除
-        document.querySelector('#root').innerHTML = '';
-    }
-    ElementDomModelRepositoryFromRealDom.createHtml = function (data, path) {
-        var memo = '';
-        Object.keys(data)
-            .map(function (key) {
-            var value = data[key];
-            var currentPath = path ? path + "." + key : key;
-            if (postit.isElement(key)) {
-                var text = value.text.split('\n').map(function (v, i) { return i == 0 ? "" + v : "<p>" + v + "</p>"; }).join('\n');
-                var style = ['margin-left', 'margin-top']
-                    .filter(function (key) { return value[key]; })
-                    .map(function (key) { return key + ":" + value[key] + "px"; })
-                    .join(';');
-                memo += "<li data-package=\"" + currentPath + "\" data-name=\"" + key + "\" style=\"" + style + "\">" + text + "</li>\n";
-            }
-            else if (postit.isNode(key, value)) {
-                memo += "<ul class=\"package\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\">" + ElementDomModelRepositoryFromRealDom.createHtml(value, currentPath) + "</ul>\n";
-            }
-        });
-        return memo;
-    };
-    ElementDomModelRepositoryFromRealDom.prototype.findByPackage = function (p) {
-        var a = this.domList.filter(function (v) { return v.package.value == p.value; });
-        if (a.length == 0) {
-            throw new Error("dom not found: " + p);
-        }
-        return a[0];
-    };
-    ElementDomModelRepositoryFromRealDom.prototype.findPackageType = function () {
-        return this.domList.filter(function (v) { return v.type == postit.Type.package; });
-    };
-    ElementDomModelRepositoryFromRealDom.prototype.getViewBoxSize = function () {
-        return this.viewBoxSize;
-    };
-    return ElementDomModelRepositoryFromRealDom;
-}());
 function main(input) {
-    var elementDomModelRepository = new ElementDomModelRepositoryFromRealDom(input);
+    var elementDomModelRepository = new ElementDomModelRepositoryLogic(input);
     var svg = createSvg(elementDomModelRepository.getViewBoxSize(), elementDomModelRepository, postit.parse(input));
     return svg;
 }

@@ -134,7 +134,7 @@ module dom {
       this.to = to;
     }
     getSvgLine() {
-      const dotMargin = 12;
+      const dotMargin = 8;
       var x1 = this.from.centerX;
       var y1 = this.from.centerY;
       if(this.to.centerY - this.from.centerY >= 0) {
@@ -178,36 +178,14 @@ function createSvg(
   parsedInput:postit.Node[]
 ) {
   const lineRaw = createLineRaw(parsedInput, elementDomModelRepository);
-  const textRaw = parsedInput
-    .map(v => elementDomModelRepository.findByPackage(v.package))
-    .map(v => {
-      var t = v.text.value.trim().split('\n')
-        .filter(v => v.trim().length > 0)
-        .map((p, i) => {
-          var dx = (i == 0 ? '4' : '19');
-          var dy;
-          if(i == 0) {
-            dy = '12';
-          } else if(i == 1) {
-            dy = '20';
-          } else {
-            dy = '16';
-          }
-          return `<tspan x="${v.x}" dx="${dx}" dy="${dy}">${i == 0 ? '・' : ''}${p}</tspan>`;
-        })
-        .join('');
-      return `<text dx="4" x="${v.x}" y="${v.y-6}">${t}</text>`;
-    })
-    .join('\n');
-
+  const textRaw = querySelectorAll('#svgCalcCanvas>text').map(v => v.outerHTML).join('\n');
   const rectRaw = parsedInput
     .map(v => elementDomModelRepository.findByPackage(v.package))
+    .map(v => {
+      console.log(v);
+      return v;
+    })
     .map(v => `<rect x="${v.x}" y="${v.y}" rx="3" ry="3" width="${v.width}" height="${v.height}" />`)
-    .join('\n');
-
-  
-  const packageTextRaw = elementDomModelRepository.findPackageType()
-    .map(v => `<text dx="24" dy="24" x="${v.x}" y="${v.y}" font-size="11">${v.name.value}</text>`)
     .join('\n');
 
   return `
@@ -238,7 +216,6 @@ function createSvg(
       <path d="M 0 0 L 10 5 L 0 10 z" />
     </marker>
   </defs>
-  <g id="package-text-group">${packageTextRaw}</g>
   <g id="rect-group">${rectRaw}</g>
   <g id="text-group">${textRaw}</g>
   <g id="line-group">${lineRaw}</g>
@@ -247,44 +224,48 @@ function createSvg(
 
 }
 
-// ----------------------------------
-// これより下は document に触れる系
-
-function querySelectorAll(selector) {
-  var l = document.querySelectorAll(selector);
-  l.filter = Array.prototype.filter;
-  l.map = Array.prototype.map;
-  l.forEach = Array.prototype.forEach;
-  return l;
-}
-
-class ElementDomModelRepositoryFromRealDom implements ElementDomModelRepository {
+class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
   readonly domList: dom.ElementDomModel[]
   readonly viewBoxSize: {width, height}
   constructor(data) {
-    // テキスト計算用DOMを作る
-    document.querySelector('#root').innerHTML = ElementDomModelRepositoryFromRealDom.createHtml(data);
+    this.viewBoxSize = [document.querySelector('.screen')].map(v => ({width: v.clientWidth, height: 1000}))[0]
+
+    document.querySelector('#calc').innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" id="svgCalcCanvas" viewBox="0 0 ${this.viewBoxSize.width} ${this.viewBoxSize.height}">
+      <defs>
+        <style>
+        text {
+          dominant-baseline:text-before-edge;
+        }
+        </style>
+      </defs>
+      ${ElementDomModelRepositoryLogic.createSizeDecideSvg(data)}
+    </svg>
+      `.trim();
 
     var screenPos = [document.querySelector('.screen').getBoundingClientRect()].map(s => ({x: window.scrollX + s.left, y: window.scrollY + s.top}))[0];
     var list = [];
-    querySelectorAll('li').forEach(v => list.push(v));
-    querySelectorAll('ul').forEach(v => list.push(v));
+    querySelectorAll('#svgCalcCanvas>text').forEach(v => list.push(v));
+    ElementDomModelRepositoryLogic.setupText(this.viewBoxSize);
+    const marginX = 16;
+    const marginY = 8;
     this.domList = list
-      .map(v => ({ tagName: v.tagName, package: v.getAttribute('data-package'), rect: v.getBoundingClientRect(), text:v.innerText, name:v.getAttribute('data-name')}))
+      .map(v => ({ tagName: v.tagName, package: v.getAttribute('data-package'), type: v.getAttribute('data-type'), rect: v.getBoundingClientRect(), text:v.innerText, name:v.getAttribute('data-name')}))
       .map(v => ({
         tagName:v.tagName,
         package:v.package,
+        type: v.type,
         name: v.name,
         text:v.text,
-        x: window.scrollX + v.rect.left - screenPos.x,
-        y: window.scrollY + v.rect.top - screenPos.y,
+        x: window.scrollX + v.rect.left - screenPos.x - marginX,
+        y: window.scrollY + v.rect.top - screenPos.y - marginY,
         centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
         centerY: window.scrollY + v.rect.top + v.rect.height / 2 - screenPos.y,
-        w: v.rect.width,
-        h: v.rect.height
+        w: v.rect.width + marginX * 2,
+        h: v.rect.height + marginY * 2
       }))
       .map(v => new dom.ElementDomModel(
-        v.tagName == 'UL' ? postit.Type.package : postit.Type.element,
+        v.type == 'package' ? postit.Type.package : postit.Type.element,
         new postit.Package(v.package),
         new postit.Name(v.name),
         new postit.Text(v.text),
@@ -295,32 +276,66 @@ class ElementDomModelRepositoryFromRealDom implements ElementDomModelRepository 
         v.w,
         v.h)
       );
-
-    this.viewBoxSize = [document.querySelector('#root')].map(v => ({width: v.clientWidth, height: v.clientHeight}))[0]
-
-    // テキスト計算用DOM削除
-    document.querySelector('#root').innerHTML = '';
   }
 
-  static createHtml(data, path?) {
+  static createSizeDecideSvg(data, path?) {
     var memo = '';
     Object.keys(data)
       .map(key => {
         const value = data[key];
         const currentPath = path ? `${path}.${key}` : key;
         if(postit.isElement(key)) {
-          let text = value.text.split('\n').map((v, i) => i == 0 ? `${v}` : `<p>${v}</p>`).join('\n');
-          let style = ['margin-left', 'margin-top']
-            .filter(key => value[key])
-            .map(key => `${key}:${value[key]}px`)
-            .join(';');
-          
-          memo += `<li data-package="${currentPath}" data-name="${key}" style="${style}">${text}</li>\n`;
+          let marginLeft = value['margin-left'] ? `margin-left="${value['margin-left']}"` : '';
+          let marginTop = value['margin-top'] ? `margin-top="${value['margin-top']}"` : '';
+          let text = value.text.indexOf('\n') == -1 ? value.text : value.text.split('\n').map((v, i) => `<tspan x="0" dx="0" dy="${i == 0 ? '0' : '1.2'}em">${v}</tspan>`).join('\n');
+          memo += `<text id="${currentPath}" data-package="${currentPath}" data-name="${key}" data-type="element" ${marginLeft} ${marginTop}>${text}</text>\n`;
         } else if(postit.isNode(key, value)) {
-          memo += `<ul class="package" data-package="${currentPath}" data-name="${key}">${ElementDomModelRepositoryFromRealDom.createHtml(value, currentPath)}</ul>\n`;
+          memo += `<text  id="${currentPath}" data-package="${currentPath}" data-name="${key}" data-type="package">${key}</text>\n`;
+          memo += ElementDomModelRepositoryLogic.createSizeDecideSvg(value, currentPath);
         }
       });
     return memo;
+  }
+
+  static setupText(viewBoxSize: {width:number, height:number}) {
+    const marginX = 48;
+    const marginY = 24;
+    var lastPackage = {x: 0, y: 0, width: 0, height: 0};
+    var lastElement = {x: 0, y: 0, width: 0, height: 0};
+    var maxY = -1;
+    querySelectorAll('#svgCalcCanvas>text').forEach(v => {
+      const packageIndent = v.getAttribute('data-package').split('.').length * 24;
+      if(v.getAttribute('data-type') == 'package') {// パッケージ
+        let y = maxY + marginY;
+        v.setAttribute('x', packageIndent);
+        v.setAttribute('y', y);
+        
+        lastPackage = v.getBBox();
+        maxY = lastPackage.y + lastPackage.height;
+        lastElement = {x: 0, y: 0, width: 0, height: 0};
+      } else if(v.getAttribute('data-type') == 'element') {// エレメント
+        let userMarginLeft = v.getAttribute('margin-left') ? parseInt(v.getAttribute('margin-left')) : 0;
+        let userMarginTop = v.getAttribute('margin-top') ? parseInt(v.getAttribute('margin-top')) : 0;
+        let x = Math.max(packageIndent, lastElement.x + lastElement.width) + marginX + userMarginLeft;
+        let y = Math.max(lastPackage.y + lastPackage.height + marginY, lastElement.y + userMarginTop);
+        // 左端がはみ出した場合は改行する
+        if(x + v.getBBox().width > viewBoxSize.width) {
+          x = packageIndent + marginX;
+          y = maxY + marginY;
+        }
+        v.setAttribute('x', x);
+        v.setAttribute('y', y);
+
+        // サブテキスト更新
+        let sub = v.querySelectorAll('tspan');
+        sub.forEach = Array.prototype.forEach;
+        sub.forEach(s => s.setAttribute('x', v.getAttribute('x')))
+
+        lastElement = v.getBBox();
+        maxY = Math.max(maxY, lastElement.y + lastElement.height);
+      }
+      
+    });
   }
 
   findByPackage(p:postit.Package): dom.ElementDomModel {
@@ -339,8 +354,19 @@ class ElementDomModelRepositoryFromRealDom implements ElementDomModelRepository 
   }
 }
 
+// ----------------------------------
+// これより下は document に触れる系
+
+function querySelectorAll(selector) {
+  var l = document.querySelectorAll(selector);
+  l.filter = Array.prototype.filter;
+  l.map = Array.prototype.map;
+  l.forEach = Array.prototype.forEach;
+  return l;
+}
+
 function main(input) {
-  const elementDomModelRepository = new ElementDomModelRepositoryFromRealDom(input);
+  const elementDomModelRepository = new ElementDomModelRepositoryLogic(input);
   
   const svg = createSvg(
     elementDomModelRepository.getViewBoxSize(),
