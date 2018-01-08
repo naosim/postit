@@ -77,12 +77,15 @@
       },
       "contract": {
         "Entity": { "text": "契約エンティティ\nほげ\nふーーー\nばーーー", "dependences": [ "$.vo.Id", "domain.member.vo.Id", "$.vo.State", "$.vo.term.StartDate", "$.vo.term.EndDate"] },
+        "Hoge": { "text": "ほげーーーーーーーーーーーーーーーー" },
+        "Foo": { "text": "ふーーーーーーーーーーーーーーーー" },
         "vo": {
           "Id": { "text": "契約ID" },
-          "State": { "text": "契約状態", "margin-left":40 },
+          "State": { "text": "契約状態", "$config": { "margin-left":40 } },
           "term": {
-          "StartDate": { "text": "契約開始日" },
-          "EndDate": { "text": "契約開始日" }
+            "StartDate": { "text": "契約開始日" },
+            "EndDate": { "text": "契約開始日" },
+            "$config": { "frame":true }
           }
         }
       },
@@ -90,7 +93,7 @@
         "Entity": { "text": "オプションエンティティ", "dependences": [ "$.vo.Id", "domain.contract.vo.Id", "$.vo.Type" ] },
         "vo": {
           "Id": { "text": "オプションID", "dependences": [ "$.Type" ] },
-          "Type": { "text": "オプションタイプ", "margin-top":40  }
+          "Type": { "text": "オプションタイプ", "$config": { "margin-top":40 } }
         }
       }
     }
@@ -102,7 +105,7 @@
 <h1>出力</h1>
 <textarea id="outputArea" class="outputArea"></textarea>
 <div class="screen">
-  <div id="root" class="layer element-layer"></div>
+  <div id="calc" class="layer"></div>
   <div class="layer line-layer"><!-- ここにsvgが挿入される --></div>
 </div>
 <script>
@@ -110,7 +113,9 @@
 function apply() {
   try {
     var input = JSON.parse(document.querySelector('#inputArea').value);
+    
     var svg = main(input);
+    
     document.querySelector('.line-layer').innerHTML = svg;
     document.querySelector('#outputArea').value = svg;
   } catch(e) {
