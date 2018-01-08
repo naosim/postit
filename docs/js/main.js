@@ -89,6 +89,9 @@ var postit;
         return Element;
     }(Node));
     function isNode(key, value) {
+        if (key == '$config') {
+            return false;
+        }
         if (key[0] == key[0].toLocaleUpperCase()) {
             return false;
         }
@@ -99,6 +102,9 @@ var postit;
     }
     postit.isNode = isNode;
     function isElement(key) {
+        if (key == '$config') {
+            return false;
+        }
         return key[0] == key[0].toLocaleUpperCase();
     }
     postit.isElement = isElement;
@@ -123,11 +129,12 @@ var postit;
 var dom;
 (function (dom) {
     var ElementDomModel = /** @class */ (function () {
-        function ElementDomModel(type, p, n, t, x, y, cX, cY, w, h) {
+        function ElementDomModel(type, p, n, t, frame, x, y, cX, cY, w, h) {
             this.type = type;
             this.package = p;
             this.name = n;
             this.text = t;
+            this.frame = frame;
             this.x = x;
             this.y = y;
             this.centerX = cX;
@@ -194,26 +201,27 @@ function createSvg(elementDomModelRepository, parsedInput) {
         .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
         .map(function (v) { return v.bottom; })
         .reduce(function (memo, v) { return Math.max(memo, v); }, 0) + 48;
-    var packageRectRaw = '';
+    // const packageRectRaw = '';
     // パッケージに枠を表示する
-    // const packageRectRaw = elementDomModelRepository.findPackageType()
-    //   .map(v => v.package)
-    //   .map(v => {
-    //     const list = elementDomModelRepository.findInclude(v);
-    //     let minX = viewBoxWidth;
-    //     let minY = viewBoxHeight;
-    //     let maxX = 0;
-    //     let maxY = 0;
-    //     list.forEach(v => {
-    //       minX = Math.min(v.x, minX);
-    //       minY = Math.min(v.y, minY);
-    //       maxX = Math.max(v.right, maxX);
-    //       maxY = Math.max(v.bottom, maxY);
-    //     });
-    //     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-    //   })
-    //   .map(v => `<rect x="${v.x}" y="${v.y}" width="${v.width + 4}" height="${v.height + 4}" fill="none" stroke="#aaa" stroke-width="1"  />`)
-    //   .join('\n');
+    var packageRectRaw = elementDomModelRepository.findPackageType()
+        .filter(function (v) { return v.frame; })
+        .map(function (v) { return v.package; })
+        .map(function (v) {
+        var list = elementDomModelRepository.findInclude(v);
+        var minX = viewBoxWidth;
+        var minY = viewBoxHeight;
+        var maxX = 0;
+        var maxY = 0;
+        list.forEach(function (v) {
+            minX = Math.min(v.x, minX);
+            minY = Math.min(v.y, minY);
+            maxX = Math.max(v.right, maxX);
+            maxY = Math.max(v.bottom, maxY);
+        });
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    })
+        .map(function (v) { return "<rect x=\"" + v.x + "\" y=\"" + v.y + "\" width=\"" + (v.width + 4) + "\" height=\"" + (v.height + 4) + "\" fill=\"none\" stroke=\"#aaa\" stroke-width=\"1\"  />"; })
+        .join('\n');
     return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxWidth + " " + viewBoxHeight + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"package-rect-group\">" + packageRectRaw + "</g>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
 }
 var ElementDomModelRepositoryLogic = /** @class */ (function () {
@@ -227,13 +235,22 @@ var ElementDomModelRepositoryLogic = /** @class */ (function () {
         var marginX = 16;
         var marginY = 8;
         this.domList = list
-            .map(function (v) { return ({ tagName: v.tagName, package: v.getAttribute('data-package'), type: v.getAttribute('data-type'), rect: v.getBoundingClientRect(), text: v.innerText, name: v.getAttribute('data-name') }); })
+            .map(function (v) { return ({
+            tagName: v.tagName,
+            package: v.getAttribute('data-package'),
+            type: v.getAttribute('data-type'),
+            rect: v.getBoundingClientRect(),
+            text: v.innerText,
+            name: v.getAttribute('data-name'),
+            frame: v.getAttribute('frame')
+        }); })
             .map(function (v) { return ({
             tagName: v.tagName,
             package: v.package,
             type: v.type,
             name: v.name,
             text: v.text,
+            frame: v.frame == 'true',
             x: window.scrollX + v.rect.left - screenPos.x - marginX,
             y: window.scrollY + v.rect.top - screenPos.y - marginY,
             centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
@@ -241,7 +258,7 @@ var ElementDomModelRepositoryLogic = /** @class */ (function () {
             w: v.rect.width + marginX * 2,
             h: v.rect.height + marginY * 2
         }); })
-            .map(function (v) { return new dom.ElementDomModel(v.type == 'package' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
+            .map(function (v) { return new dom.ElementDomModel(v.type == 'package' ? postit.Type.package : postit.Type.element, new postit.Package(v.package), new postit.Name(v.name), new postit.Text(v.text), v.frame, v.x, v.y, v.centerX, v.centerY, v.w, v.h); });
     }
     ElementDomModelRepositoryLogic.createSizeDecideSvg = function (data, path) {
         var memo = '';
@@ -249,14 +266,16 @@ var ElementDomModelRepositoryLogic = /** @class */ (function () {
             .map(function (key) {
             var value = data[key];
             var currentPath = path ? path + "." + key : key;
+            var config = '';
+            if (value['$config']) {
+                config = Object.keys(value['$config']).map(function (configKey) { return configKey + "=\"" + value['$config'][configKey] + "\""; }).join(' ');
+            }
             if (postit.isElement(key)) {
-                var marginLeft = value['margin-left'] ? "margin-left=\"" + value['margin-left'] + "\"" : '';
-                var marginTop = value['margin-top'] ? "margin-top=\"" + value['margin-top'] + "\"" : '';
                 var text = value.text.indexOf('\n') == -1 ? value.text : value.text.split('\n').map(function (v, i) { return "<tspan x=\"0\" dx=\"0\" dy=\"" + (i == 0 ? '0' : '1.2') + "em\">" + v + "</tspan>"; }).join('\n');
-                memo += "<text id=\"" + currentPath + "\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\" data-type=\"element\" " + marginLeft + " " + marginTop + ">" + text + "</text>\n";
+                memo += "<text id=\"" + currentPath + "\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\" data-type=\"element\" " + config + ">" + text + "</text>\n";
             }
             else if (postit.isNode(key, value)) {
-                memo += "<text  id=\"" + currentPath + "\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\" data-type=\"package\">" + key + "</text>\n";
+                memo += "<text id=\"" + currentPath + "\" data-package=\"" + currentPath + "\" data-name=\"" + key + "\" data-type=\"package\" " + config + ">" + key + "</text>\n";
                 memo += ElementDomModelRepositoryLogic.createSizeDecideSvg(value, currentPath);
             }
         });

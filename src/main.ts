@@ -58,6 +58,9 @@ module postit {
   }
 
   export function isNode(key:string, value:any) {
+    if(key == '$config') {
+      return false;
+    }
     if(key[0] == key[0].toLocaleUpperCase()) {
       return false;
     }
@@ -68,6 +71,9 @@ module postit {
   }
 
   export function isElement(key:string) {
+    if(key == '$config') {
+      return false;
+    }
     return key[0] == key[0].toLocaleUpperCase();
   }
 
@@ -102,6 +108,7 @@ module dom {
     readonly package:postit.Package;
     readonly name:postit.Name;
     readonly text:postit.Text;
+    readonly frame:boolean;
     readonly x: number;
     readonly y: number;
     readonly centerX: number;
@@ -110,11 +117,12 @@ module dom {
     readonly height: number;
     readonly right: number;
     readonly bottom: number;
-    constructor(type:postit.Type, p:postit.Package, n:postit.Name, t:postit.Text, x:number, y:number, cX:number, cY:number, w:number, h:number) {
+    constructor(type:postit.Type, p:postit.Package, n:postit.Name, t:postit.Text, frame:boolean, x:number, y:number, cX:number, cY:number, w:number, h:number) {
       this.type = type;
       this.package = p;
       this.name = n;
       this.text = t;
+      this.frame = frame;
       this.x = x;
       this.y = y;
       this.centerX = cX;
@@ -193,26 +201,27 @@ function createSvg(
     .map(v => v.bottom)
     .reduce((memo, v) => Math.max(memo, v), 0) + 48;
 
-  const packageRectRaw = '';
+  // const packageRectRaw = '';
   // パッケージに枠を表示する
-  // const packageRectRaw = elementDomModelRepository.findPackageType()
-  //   .map(v => v.package)
-  //   .map(v => {
-  //     const list = elementDomModelRepository.findInclude(v);
-  //     let minX = viewBoxWidth;
-  //     let minY = viewBoxHeight;
-  //     let maxX = 0;
-  //     let maxY = 0;
-  //     list.forEach(v => {
-  //       minX = Math.min(v.x, minX);
-  //       minY = Math.min(v.y, minY);
-  //       maxX = Math.max(v.right, maxX);
-  //       maxY = Math.max(v.bottom, maxY);
-  //     });
-  //     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-  //   })
-  //   .map(v => `<rect x="${v.x}" y="${v.y}" width="${v.width + 4}" height="${v.height + 4}" fill="none" stroke="#aaa" stroke-width="1"  />`)
-  //   .join('\n');
+  const packageRectRaw = elementDomModelRepository.findPackageType()
+    .filter(v => v.frame)
+    .map(v => v.package)
+    .map(v => {
+      const list = elementDomModelRepository.findInclude(v);
+      let minX = viewBoxWidth;
+      let minY = viewBoxHeight;
+      let maxX = 0;
+      let maxY = 0;
+      list.forEach(v => {
+        minX = Math.min(v.x, minX);
+        minY = Math.min(v.y, minY);
+        maxX = Math.max(v.right, maxX);
+        maxY = Math.max(v.bottom, maxY);
+      });
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    })
+    .map(v => `<rect x="${v.x}" y="${v.y}" width="${v.width + 4}" height="${v.height + 4}" fill="none" stroke="#aaa" stroke-width="1"  />`)
+    .join('\n');
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" id="svgCanvas" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
@@ -279,13 +288,22 @@ class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
     const marginX = 16;
     const marginY = 8;
     this.domList = list
-      .map(v => ({ tagName: v.tagName, package: v.getAttribute('data-package'), type: v.getAttribute('data-type'), rect: v.getBoundingClientRect(), text:v.innerText, name:v.getAttribute('data-name')}))
+      .map(v => ({ 
+        tagName: v.tagName, 
+        package: v.getAttribute('data-package'), 
+        type: v.getAttribute('data-type'), 
+        rect: v.getBoundingClientRect(), 
+        text:v.innerText, 
+        name:v.getAttribute('data-name'),
+        frame:v.getAttribute('frame')
+      }))
       .map(v => ({
         tagName:v.tagName,
         package:v.package,
         type: v.type,
         name: v.name,
         text:v.text,
+        frame:v.frame == 'true',
         x: window.scrollX + v.rect.left - screenPos.x - marginX,
         y: window.scrollY + v.rect.top - screenPos.y - marginY,
         centerX: window.scrollX + v.rect.left + v.rect.width / 2 - screenPos.x,
@@ -298,6 +316,7 @@ class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
         new postit.Package(v.package),
         new postit.Name(v.name),
         new postit.Text(v.text),
+        v.frame,
         v.x,
         v.y,
         v.centerX,
@@ -313,13 +332,17 @@ class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
       .map(key => {
         const value = data[key];
         const currentPath = path ? `${path}.${key}` : key;
+
+        let config = '';
+        if(value['$config']) {
+          config = Object.keys(value['$config']).map(configKey => `${configKey}="${value['$config'][configKey]}"`).join(' ');
+        }
+        
         if(postit.isElement(key)) {
-          let marginLeft = value['margin-left'] ? `margin-left="${value['margin-left']}"` : '';
-          let marginTop = value['margin-top'] ? `margin-top="${value['margin-top']}"` : '';
           let text = value.text.indexOf('\n') == -1 ? value.text : value.text.split('\n').map((v, i) => `<tspan x="0" dx="0" dy="${i == 0 ? '0' : '1.2'}em">${v}</tspan>`).join('\n');
-          memo += `<text id="${currentPath}" data-package="${currentPath}" data-name="${key}" data-type="element" ${marginLeft} ${marginTop}>${text}</text>\n`;
+          memo += `<text id="${currentPath}" data-package="${currentPath}" data-name="${key}" data-type="element" ${config}>${text}</text>\n`;
         } else if(postit.isNode(key, value)) {
-          memo += `<text  id="${currentPath}" data-package="${currentPath}" data-name="${key}" data-type="package">${key}</text>\n`;
+          memo += `<text id="${currentPath}" data-package="${currentPath}" data-name="${key}" data-type="package" ${config}>${key}</text>\n`;
           memo += ElementDomModelRepositoryLogic.createSizeDecideSvg(value, currentPath);
         }
       });
