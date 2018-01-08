@@ -156,6 +156,7 @@ module dom {
 interface ElementDomModelRepository {
   findByPackage(p:postit.Package): dom.ElementDomModel;
   findPackageType(): dom.ElementDomModel[];
+  findInclude(p:postit.Package): dom.ElementDomModel[];
 }
 
 function createLineRaw(parsedInput, elementDomModelRepository: ElementDomModelRepository) {
@@ -192,6 +193,27 @@ function createSvg(
     .map(v => v.bottom)
     .reduce((memo, v) => Math.max(memo, v), 0) + 48;
 
+  const packageRectRaw = '';
+  // パッケージに枠を表示する
+  // const packageRectRaw = elementDomModelRepository.findPackageType()
+  //   .map(v => v.package)
+  //   .map(v => {
+  //     const list = elementDomModelRepository.findInclude(v);
+  //     let minX = viewBoxWidth;
+  //     let minY = viewBoxHeight;
+  //     let maxX = 0;
+  //     let maxY = 0;
+  //     list.forEach(v => {
+  //       minX = Math.min(v.x, minX);
+  //       minY = Math.min(v.y, minY);
+  //       maxX = Math.max(v.right, maxX);
+  //       maxY = Math.max(v.bottom, maxY);
+  //     });
+  //     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  //   })
+  //   .map(v => `<rect x="${v.x}" y="${v.y}" width="${v.width + 4}" height="${v.height + 4}" fill="none" stroke="#aaa" stroke-width="1"  />`)
+  //   .join('\n');
+
   return `
 <svg xmlns="http://www.w3.org/2000/svg" id="svgCanvas" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
   <defs>
@@ -220,6 +242,7 @@ function createSvg(
       <path d="M 0 0 L 10 5 L 0 10 z" />
     </marker>
   </defs>
+  <g id="package-rect-group">${packageRectRaw}</g>
   <g id="rect-group">${rectRaw}</g>
   <g id="text-group">${textRaw}</g>
   <g id="line-group">${lineRaw}</g>
@@ -353,6 +376,10 @@ class ElementDomModelRepositoryLogic implements ElementDomModelRepository {
   }
   findPackageType(): dom.ElementDomModel[] {
     return this.domList.filter(v => v.type == postit.Type.package);
+  }
+
+  findInclude(p:postit.Package): dom.ElementDomModel[] {
+    return this.domList.filter(v => v.package.value.indexOf(p.value) == 0);
   }
 }
 

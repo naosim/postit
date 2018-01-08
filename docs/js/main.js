@@ -194,7 +194,27 @@ function createSvg(elementDomModelRepository, parsedInput) {
         .map(function (v) { return elementDomModelRepository.findByPackage(v.package); })
         .map(function (v) { return v.bottom; })
         .reduce(function (memo, v) { return Math.max(memo, v); }, 0) + 48;
-    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxWidth + " " + viewBoxHeight + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
+    var packageRectRaw = '';
+    // パッケージに枠を表示する
+    // const packageRectRaw = elementDomModelRepository.findPackageType()
+    //   .map(v => v.package)
+    //   .map(v => {
+    //     const list = elementDomModelRepository.findInclude(v);
+    //     let minX = viewBoxWidth;
+    //     let minY = viewBoxHeight;
+    //     let maxX = 0;
+    //     let maxY = 0;
+    //     list.forEach(v => {
+    //       minX = Math.min(v.x, minX);
+    //       minY = Math.min(v.y, minY);
+    //       maxX = Math.max(v.right, maxX);
+    //       maxY = Math.max(v.bottom, maxY);
+    //     });
+    //     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    //   })
+    //   .map(v => `<rect x="${v.x}" y="${v.y}" width="${v.width + 4}" height="${v.height + 4}" fill="none" stroke="#aaa" stroke-width="1"  />`)
+    //   .join('\n');
+    return ("\n<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"svgCanvas\" viewBox=\"0 0 " + viewBoxWidth + " " + viewBoxHeight + "\">\n  <defs>\n    <style>\n    #package-text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #rect-group {\n      stroke:#880;\n      fill:#ff8\n    }\n    #text-group {\n      stroke:#333;\n      dominant-baseline:text-before-edge;\n    }\n    #line-group {\n      stroke:#333;\n      marker-end:url(#Triangle);\n      fill:none;\n      stroke-width:1;\n    }\n    </style>\n    <marker id=\"Triangle\" viewBox=\"0 0 10 10\" refX=\"12\" refY=\"5\"\n        markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\" fill=\"#333\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\" />\n    </marker>\n  </defs>\n  <g id=\"package-rect-group\">" + packageRectRaw + "</g>\n  <g id=\"rect-group\">" + rectRaw + "</g>\n  <g id=\"text-group\">" + textRaw + "</g>\n  <g id=\"line-group\">" + lineRaw + "</g>\n</svg>\n  ").trim();
 }
 var ElementDomModelRepositoryLogic = /** @class */ (function () {
     function ElementDomModelRepositoryLogic(data) {
@@ -288,6 +308,9 @@ var ElementDomModelRepositoryLogic = /** @class */ (function () {
     };
     ElementDomModelRepositoryLogic.prototype.findPackageType = function () {
         return this.domList.filter(function (v) { return v.type == postit.Type.package; });
+    };
+    ElementDomModelRepositoryLogic.prototype.findInclude = function (p) {
+        return this.domList.filter(function (v) { return v.package.value.indexOf(p.value) == 0; });
     };
     return ElementDomModelRepositoryLogic;
 }());
